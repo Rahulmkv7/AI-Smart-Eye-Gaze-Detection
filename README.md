@@ -1,2 +1,16 @@
-# AI-Smart-Eye-Gaze-Detection
-AI-powered assistive system using MediaPipe, OpenCV and ESP32-CAM.
+# AI-Based Smart Eye Gaze Detection
+
+An AI-powered assistive system that detects eye gaze using MediaPipe and controls hardware through ESP32.
+
+## Technologies
+
+- Python
+- OpenCV
+- MediaPipe
+- ESP32
+- Flask
+- Arduino
+
+## Status
+
+Finished
