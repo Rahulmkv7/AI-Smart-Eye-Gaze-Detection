@@ -1,0 +1,106 @@
+import cv2
+import mediapipe as mp
+import socket
+import time
+
+# ================= ESP32 =================
+ESP_IP = "10.229.114.131"   # Servo ESP
+PORT = 5000
+
+# ================= STREAM =================
+STREAM_URL = "http://10.250.162.190/stream"  # Camera ESP
+
+# ================= TCP =================
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.connect((ESP_IP, PORT))
+print("Connected to ESP32")
+
+# ================= MEDIAPIPE =================
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(
+    refine_landmarks=True,
+    max_num_faces=1
+)
+
+# ================= VIDEO =================
+cap = cv2.VideoCapture(STREAM_URL)
+
+last_command = ""
+last_time = time.time()
+
+while True:
+
+    ret, frame = cap.read()
+
+    if not ret:
+        print("Stream lost... retrying")
+        continue
+
+    frame = cv2.flip(frame, 1)
+
+    h, w, _ = frame.shape
+
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = face_mesh.process(rgb)
+
+    command = "CENTER"
+
+    if results.multi_face_landmarks:
+
+        mesh = results.multi_face_landmarks[0]
+
+        if len(mesh.landmark) > 468:
+
+            iris = mesh.landmark[468]
+
+            left = mesh.landmark[33]
+            right = mesh.landmark[133]
+            top = mesh.landmark[159]
+            bottom = mesh.landmark[145]
+
+            if (right.x - left.x) > 0 and (bottom.y - top.y) > 0:
+
+                x_ratio = (iris.x - left.x) / (right.x - left.x)
+                y_ratio = (iris.y - top.y) / (bottom.y - top.y)
+
+                if x_ratio < 0.35:
+                    command = "L"
+                elif x_ratio > 0.65:
+                    command = "R"
+                elif y_ratio < 0.35:
+                    command = "U"
+                elif y_ratio > 0.65:
+                    command = "D"
+                else:
+                    command = "C"
+
+            # 🔥 Draw iris point
+            ix = int(iris.x * w)
+            iy = int(iris.y * h)
+            cv2.circle(frame, (ix, iy), 4, (0,255,0), -1)
+
+    # ================= SEND DATA =================
+    now = time.time()
+
+    if command != last_command and now - last_time > 0.3:
+        try:
+            sock.send(command[0].encode())  # send L/R/U/D/C
+            print("Sent:", command)
+            last_command = command
+            last_time = now
+        except:
+            print("Connection lost")
+            break
+
+    # ================= DISPLAY =================
+    cv2.putText(frame, command, (20, 50),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,0,255), 3)
+
+    cv2.imshow("ESP32 Eye Tracking", frame)
+
+    if cv2.waitKey(1) == 27:
+        break
+
+cap.release()
+sock.close()
+cv2.destroyAllWindows()
